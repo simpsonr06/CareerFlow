@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CareerFlow | Configurable Job Discovery & Application Management</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body class="dark-theme">
+  <!-- Top Application Banner -->
+  <header class="app-header">
+    <div class="header-brand">
+      <div class="logo-symbol">
+        <span class="logo-icon">🧭</span>
+      </div>
+      <div>
+        <h1 class="logo-title">CAREER<span class="logo-accent">FLOW</span></h1>
+        <p class="logo-subtitle">Domain-Agnostic Job Discovery & Application Management</p>
+      </div>
+    </div>
+
+    <div class="header-profile">
+      <div class="profile-badge" id="headerProfileBadge" title="Click to edit profile">
+        <span class="badge-dot"></span>
+        <span class="profile-text" id="headerProfileText">Loading profile...</span>
+      </div>
+      <div class="system-status">
+        <span class="status-pill safe">Local-First (127.0.0.1)</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Navigation Tabs -->
+  <nav class="nav-tabs" id="mainNav">
+    <button class="nav-tab active" data-tab="overview">
+      <span class="tab-icon">📊</span> Overview
+    </button>
+    <button class="nav-tab" data-tab="explorer">
+      <span class="tab-icon">🔍</span> Job Explorer
+      <span class="tab-badge" id="badgeTotalJobs">0</span>
+    </button>
+    <button class="nav-tab" data-tab="verification">
+      <span class="tab-icon">⏳</span> Verification Queue
+      <span class="tab-badge warning" id="badgeQueue">0</span>
+    </button>
+    <button class="nav-tab" data-tab="tracker">
+      <span class="tab-icon">📋</span> Application Tracker
+      <span class="tab-badge info" id="badgeTracker">0</span>
+    </button>
+    <button class="nav-tab" data-tab="search">
+      <span class="tab-icon">🚀</span> Live Search
+    </button>
+    <button class="nav-tab" data-tab="profile">
+      <span class="tab-icon">⚙️</span> Profile & Settings
+    </button>
+  </nav>
+
+  <!-- Main Content Container -->
+  <main class="app-container">
+
+    <!-- 1. OVERVIEW PAGE -->
+    <section id="tab-overview" class="tab-pane active">
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-header">
+            <span class="metric-title">Discovered Vacancies</span>
+            <span class="metric-icon">🌐</span>
+          </div>
+          <div class="metric-value" id="statDiscovered">0</div>
+          <div class="metric-subtext">Total recorded in seen_jobs.json</div>
+        </div>
+
+        <div class="metric-card ready">
+          <div class="metric-header">
+            <span class="metric-title">Shortlist Ready</span>
+            <span class="metric-icon">✅</span>
+          </div>
+          <div class="metric-value" id="statShortlist">0</div>
+          <div class="metric-subtext">Score &ge; 70 + Satisfied eligibility</div>
+        </div>
+
+        <div class="metric-card queue">
+          <div class="metric-header">
+            <span class="metric-title">Verification Queue</span>
+            <span class="metric-icon">⏳</span>
+          </div>
+          <div class="metric-value" id="statQueue">0</div>
+          <div class="metric-subtext">High fit with unconfirmed batch / status</div>
+        </div>
+
+        <div class="metric-card excluded">
+          <div class="metric-header">
+            <span class="metric-title">Excluded</span>
+            <span class="metric-icon">🚫</span>
+          </div>
+          <div class="metric-value" id="statExcluded">0</div>
+          <div class="metric-subtext">Unrelated roles, expired, or disqualified</div>
+        </div>
+
+        <div class="metric-card tracker">
+          <div class="metric-header">
+            <span class="metric-title">Tracked Applications</span>
+            <span class="metric-icon">📑</span>
+          </div>
+          <div class="metric-value" id="statTracker">0</div>
+          <div class="metric-subtext">Actively tracked in CSV pipeline</div>
+        </div>
+      </div>
+
+      <!-- Overview Charts / Grid -->
+      <div class="overview-grid">
+        <div class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">Role & Domain Distribution</h2>
+          </div>
+          <div class="panel-body">
+            <div id="roleBreakdownList" class="bar-list">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">Top Matched Skills</h2>
+          </div>
+          <div class="panel-body">
+            <div id="skillsPillCloud" class="pill-cloud">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Application Status Pipeline Summary -->
+      <div class="panel mt-4">
+        <div class="panel-header">
+          <h2 class="panel-title">Application Pipeline Funnel</h2>
+          <span class="tag-outline">Official Vocabulary</span>
+        </div>
+        <div class="panel-body">
+          <div class="pipeline-funnel" id="pipelineFunnel">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. JOB EXPLORER PAGE -->
+    <section id="tab-explorer" class="tab-pane">
+      <div class="filter-bar">
+        <div class="search-input-group">
+          <span class="input-icon">🔍</span>
+          <input type="text" id="filterQuery" placeholder="Search title, company, skills, or keywords...">
+        </div>
+
+        <div class="select-group">
+          <label>Shortlist Tier:</label>
+          <select id="filterTier">
+            <option value="ALL">All Tiers</option>
+            <option value="SHORTLIST_READY">Shortlist Ready</option>
+            <option value="VERIFICATION_QUEUE">Verification Queue</option>
+            <option value="EXCLUDED">Excluded</option>
+          </select>
+        </div>
+
+        <div class="select-group">
+          <label>Classification:</label>
+          <select id="filterClassification">
+            <option value="ALL">All Classifications</option>
+            <option value="HIGH_MATCH">High Match</option>
+            <option value="POTENTIAL_MATCH">Potential Match</option>
+            <option value="NEEDS_VERIFICATION">Needs Verification</option>
+            <option value="LOW_MATCH">Low Match</option>
+          </select>
+        </div>
+
+        <div class="select-group">
+          <label>Eligibility:</label>
+          <select id="filterEligibility">
+            <option value="ALL">All Statuses</option>
+            <option value="eligible">Explicit Batch / Verified</option>
+            <option value="unknown">Unknown / Unverified</option>
+            <option value="unspecified">Unspecified</option>
+            <option value="ineligible_batch">Ineligible Batch</option>
+            <option value="ineligible_senior">Senior Disqualified</option>
+          </select>
+        </div>
+
+        <div class="select-group">
+          <label>Min Score:</label>
+          <select id="filterMinScore">
+            <option value="">Any Score</option>
+            <option value="80">80+ (Strong)</option>
+            <option value="70">70+ (Good)</option>
+            <option value="50">50+ (Moderate)</option>
+          </select>
+        </div>
+
+        <button class="btn btn-secondary" id="btnResetFilters">Reset</button>
+      </div>
+
+      <div class="panel mt-4">
+        <div class="panel-header table-header">
+          <div>
+            <h2 class="panel-title">Discovered Job Postings</h2>
+            <span class="subtext-count" id="tableResultCount">Showing 0 jobs</span>
+          </div>
+          <div class="sort-controls">
+            <label>Sort By:</label>
+            <select id="sortField">
+              <option value="relevance_score">Relevance Score</option>
+              <option value="first_seen">First Seen</option>
+              <option value="title">Title</option>
+              <option value="company">Company</option>
+            </select>
+            <button class="btn-icon" id="btnSortOrder" title="Toggle Sort Order">⬇️</button>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table" id="jobsTable">
+            <thead>
+              <tr>
+                <th width="70">Score</th>
+                <th width="140">Tier</th>
+                <th>Role & Company</th>
+                <th width="140">Location</th>
+                <th width="130">Eligibility</th>
+                <th width="110">App Status</th>
+                <th width="80">Conf</th>
+                <th width="110">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="jobsTableBody">
+              <tr><td colspan="8" class="text-center p-4">Loading vacancies...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. VERIFICATION QUEUE PAGE -->
+    <section id="tab-verification" class="tab-pane">
+      <div class="notice-banner warning">
+        <div class="banner-icon">⚖️</div>
+        <div>
+          <strong>Verification Safeguard Active:</strong>
+          Vacancies in this queue match the candidate's target profile, but require explicit verification of graduation/batch eligibility or direct confirmation that applications are actively open. A vacancy is <em>never</em> marked open or eligible without explicit proof.
+        </div>
+      </div>
+
+      <div class="panel mt-4">
+        <div class="panel-header">
+          <h2 class="panel-title">Pending Verification Queue</h2>
+          <span class="badge warning" id="queueCountBadge">0 Pending</span>
+        </div>
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th width="70">Score</th>
+                <th>Opportunity</th>
+                <th width="150">Current Status</th>
+                <th>Verification Reason & Gaps</th>
+                <th width="140">Evidence Source</th>
+                <th width="120">Action</th>
+              </tr>
+            </thead>
+            <tbody id="queueTableBody">
+              <tr><td colspan="6" class="text-center p-4">Loading verification queue...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Audit Trail Section -->
+      <div class="panel mt-4">
+        <div class="panel-header">
+          <h2 class="panel-title">Manual Verification Audit Log</h2>
+          <span class="subtext-count">Immutable review trail</span>
+        </div>
+        <div class="table-container">
+          <table class="data-table compact">
+            <thead>
+              <tr>
+                <th width="160">Timestamp</th>
+                <th>Company & Role</th>
+                <th width="140">Eligibility Change</th>
+                <th width="130">App Status</th>
+                <th>Evidence Submitted</th>
+              </tr>
+            </thead>
+            <tbody id="auditTableBody">
+              <tr><td colspan="5" class="text-center p-3 text-muted">No manual verifications recorded yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. APPLICATION TRACKER PAGE -->
+    <section id="tab-tracker" class="tab-pane">
+      <div class="tracker-header-bar">
+        <div class="notice-banner info flex-1">
+          <div class="banner-icon">ℹ️</div>
+          <div>
+            <strong>Local Tracker Only:</strong> Applications are tracked locally in <code>job_search_tracker.csv</code>. CareerFlow will <em>never</em> submit applications or contact recruiters automatically.
+          </div>
+        </div>
+        <button class="btn btn-primary" id="btnOpenAddTracker">
+          <span>➕</span> Track Application
+        </button>
+      </div>
+
+      <div class="panel mt-4">
+        <div class="panel-header table-header">
+          <h2 class="panel-title">Application Spreadsheet View</h2>
+          <span class="subtext-count" id="trackerRowCount">0 tracked applications</span>
+        </div>
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th width="110">Date Applied</th>
+                <th>Company</th>
+                <th>Role</th>
+                <th width="130">Status</th>
+                <th width="110">Deadline</th>
+                <th width="100">Fit</th>
+                <th>Notes</th>
+                <th width="90">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="trackerTableBody">
+              <tr><td colspan="8" class="text-center p-4">No applications recorded in job_search_tracker.csv yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. SEARCH CONTROLS PAGE -->
+    <section id="tab-search" class="tab-pane">
+      <div class="panel">
+        <div class="panel-header">
+          <h2 class="panel-title">Targeted On-Demand Discovery</h2>
+          <span class="tag-outline">Rate-Limit Safe</span>
+        </div>
+        <div class="panel-body">
+          <form id="searchForm" class="search-form">
+            <div class="form-row">
+              <div class="form-group flex-2">
+                <label for="searchKeywords">Keywords / Queries</label>
+                <input type="text" id="searchKeywords" value="software engineer intern" required>
+                <div class="chips-row" id="searchPresetsRow">
+                  <!-- Dynamically populated from /api/profile/search-presets -->
+                </div>
+              </div>
+
+              <div class="form-group flex-1">
+                <label for="searchLocation">Location</label>
+                <input type="text" id="searchLocation" value="India">
+              </div>
+
+              <div class="form-group">
+                <label for="searchPortal">Portal</label>
+                <select id="searchPortal">
+                  <option value="all">All Available (LinkedIn + FreeHire)</option>
+                  <option value="linkedin">LinkedIn Search CLI</option>
+                  <option value="freehire">FreeHire Search CLI</option>
+                </select>
+              </div>
+
+              <div class="form-group width-sm">
+                <label for="searchLimit">Limit (Max 5)</label>
+                <input type="number" id="searchLimit" value="3" min="1" max="5">
+              </div>
+            </div>
+
+            <div class="form-row align-center mt-3">
+              <label class="checkbox-label">
+                <input type="checkbox" id="searchEnrichLinkedin" checked>
+                <span>Automatically enrich LinkedIn search cards with full detail (JobDetail API)</span>
+              </label>
+
+              <button type="submit" class="btn btn-primary ml-auto" id="btnExecuteSearch">
+                <span class="btn-spinner hidden" id="searchSpinner">🌀</span>
+                <span id="btnSearchText">Run Targeted Search</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Search Console Output -->
+      <div class="panel mt-4">
+        <div class="panel-header">
+          <h2 class="panel-title">Search Diagnostics & Results Console</h2>
+          <span class="tag-outline" id="searchConsoleStatus">Idle</span>
+        </div>
+        <div class="panel-body">
+          <pre class="console-box" id="searchConsoleOutput">Ready to perform on-demand searches. Search limits are throttled to protect API quotas.</pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. PROFILE & SETTINGS PAGE -->
+    <section id="tab-profile" class="tab-pane">
+      <div class="notice-banner info mb-4">
+        <div class="banner-icon">💡</div>
+        <div>
+          <strong>Configurable Candidate Profile:</strong>
+          Define your target roles, industries, skills, education, experience levels, and work preferences. All relevance scoring and search recommendations update immediately to align with this profile.
+        </div>
+      </div>
+
+      <form id="profileForm" class="profile-form">
+        <div class="profile-layout-grid">
+
+          <!-- Column 1: Identity & Target Roles -->
+          <div class="panel">
+            <div class="panel-header">
+              <h2 class="panel-title">👤 Candidate Identity & Roles</h2>
+            </div>
+            <div class="panel-body">
+              <div class="form-group mb-3">
+                <label for="profileCandidateName">Full Name</label>
+                <input type="text" id="profileCandidateName" placeholder="e.g. Alex Morgan" required>
+              </div>
+
+              <div class="form-group mb-3">
+                <label for="profileHeadline">Professional Headline</label>
+                <input type="text" id="profileHeadline" placeholder="e.g. Technology Graduate | Backend & Cloud">
+              </div>
+
+              <div class="form-group mb-3">
+                <label for="profileRoles">Preferred Job Titles / Role Families</label>
+                <textarea id="profileRoles" rows="4" placeholder="Enter comma-separated roles, e.g. Software Engineer, Backend Developer, AI Engineer, Security Analyst" required></textarea>
+                <span class="form-hint">Used for title matching and search presets.</span>
+              </div>
+
+              <div class="form-group">
+                <label for="profileIndustries">Target Industries & Sectors</label>
+                <textarea id="profileIndustries" rows="3" placeholder="e.g. Information Technology, FinTech, Healthcare, Consulting"></textarea>
+                <span class="form-hint">Comma-separated industry domains of interest.</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Column 2: Education & Experience -->
+          <div class="panel">
+            <div class="panel-header">
+              <h2 class="panel-title">🎓 Education & Experience Level</h2>
+            </div>
+            <div class="panel-body">
+              <div class="form-group mb-3">
+                <label for="profileEducationDegree">Degree / Academic Program</label>
+                <input type="text" id="profileEducationDegree" placeholder="e.g. B.Tech / B.S. in Computer Science">
+              </div>
+
+              <div class="form-row mb-3">
+                <div class="form-group flex-1">
+                  <label for="profileEducationLevel">Degree Level</label>
+                  <select id="profileEducationLevel">
+                    <option value="Bachelor's Degree">Bachelor's Degree</option>
+                    <option value="Master's Degree">Master's Degree</option>
+                    <option value="Doctorate / PhD">Doctorate / PhD</option>
+                    <option value="Associate / Diploma">Associate / Diploma</option>
+                    <option value="Other / Self-Taught">Other / Self-Taught</option>
+                  </select>
+                </div>
+                <div class="form-group flex-1">
+                  <label for="profileGradYear">Graduation Year</label>
+                  <input type="number" id="profileGradYear" placeholder="e.g. 2027" min="2020" max="2035">
+                </div>
+              </div>
+
+              <div class="form-group mb-4">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="profileRequireGradYear" checked>
+                  <span>Strictly require target graduation batch match (recommended for active students)</span>
+                </label>
+              </div>
+
+              <div class="form-group">
+                <label class="mb-2 block">Target Experience Levels</label>
+                <div class="checkbox-grid">
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="profileExpInternship" value="internship" checked>
+                    <span>Internship</span>
+                  </label>
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="profileExpFresher" value="fresher" checked>
+                    <span>Fresher / Graduate</span>
+                  </label>
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="profileExpEntry" value="entry_level" checked>
+                    <span>Entry-Level</span>
+                  </label>
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="profileExpMid" value="mid_level">
+                    <span>Mid-Level</span>
+                  </label>
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="profileExpSenior" value="senior">
+                    <span>Senior / Lead</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Column 3: Skills, Locations & Arrangements -->
+          <div class="panel">
+            <div class="panel-header">
+              <h2 class="panel-title">🛠️ Skills & Work Arrangements</h2>
+            </div>
+            <div class="panel-body">
+              <div class="form-group mb-3">
+                <label for="profileSkills">Relevant Skills & Keywords</label>
+                <textarea id="profileSkills" rows="4" placeholder="Enter comma-separated skills, e.g. python, sql, docker, figma, excel, git, apis" required></textarea>
+                <span class="form-hint">Matched against job descriptions for technical suitability.</span>
+              </div>
+
+              <div class="form-group mb-3">
+                <label for="profileLocations">Preferred Locations</label>
+                <input type="text" id="profileLocations" placeholder="e.g. India, Bangalore, Mumbai, Remote">
+                <span class="form-hint">Comma-separated cities, countries, or Remote.</span>
+              </div>
+
+              <div class="form-group mb-3">
+                <label class="mb-1 block">Work Arrangements</label>
+                <div class="checkbox-grid">
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="profileArrRemote" value="remote" checked>
+                    <span>Remote</span>
+                  </label>
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="profileArrHybrid" value="hybrid" checked>
+                    <span>Hybrid</span>
+                  </label>
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="profileArrOnsite" value="onsite" checked>
+                    <span>Onsite</span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="mb-1 block">Employment Types</label>
+                <div class="checkbox-grid">
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="profileEmpIntern" value="internship" checked>
+                    <span>Internship</span>
+                  </label>
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="profileEmpFullTime" value="full_time" checked>
+                    <span>Full-Time</span>
+                  </label>
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="profileEmpPartTime" value="part_time">
+                    <span>Part-Time</span>
+                  </label>
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="profileEmpContract" value="contract">
+                    <span>Contract</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Form Actions Bar -->
+        <div class="panel mt-4">
+          <div class="panel-body flex-row justify-between align-center">
+            <div>
+              <span class="text-sm text-muted">Profiles are saved locally in <code>config/candidate_profile.json</code>.</span>
+            </div>
+            <div class="flex-row gap-2">
+              <button type="button" class="btn btn-secondary" id="btnResetProfile">Reset to Defaults</button>
+              <button type="submit" class="btn btn-primary" id="btnSaveProfile">
+                <span>💾</span> Save Profile & Update Discovery
+              </button>
+            </div>
+          </div>
+        </div>
+      </form>
+    </section>
+
+  </main>
+
+  <!-- MODAL: JOB DETAIL -->
+  <div class="modal-overlay hidden" id="jobDetailModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <h3 class="modal-title" id="modalJobTitle">Job Title</h3>
+          <p class="modal-subtitle" id="modalJobCompany">Company & Location</p>
+        </div>
+        <button class="modal-close" id="btnCloseJobModal">&times;</button>
+      </div>
+      <div class="modal-body" id="modalJobBody">
+        <!-- Rendered by JS -->
+      </div>
+      <div class="modal-footer">
+        <a href="#" target="_blank" class="btn btn-secondary" id="modalSearchUrlBtn">View Search Listing</a>
+        <a href="#" target="_blank" class="btn btn-primary" id="modalAppUrlBtn">Direct Application Link</a>
+        <button class="btn btn-warning" id="modalOpenVerifyBtn">Verify Opportunity</button>
+        <button class="btn btn-info" id="modalTrackBtn">Add to Tracker</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: VERIFICATION DIALOG -->
+  <div class="modal-overlay hidden" id="verifyModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <h3 class="modal-title">Record Manual Verification</h3>
+          <p class="modal-subtitle" id="verifyModalSubtitle">Opportunity details</p>
+        </div>
+        <button class="modal-close" id="btnCloseVerifyModal">&times;</button>
+      </div>
+      <form id="verifyForm">
+        <input type="hidden" id="verifyKey">
+        <div class="modal-body">
+          <div class="notice-banner warning mb-3">
+            <div class="banner-icon">⚠️</div>
+            <div class="text-xs">
+              <strong>Mandatory Quality Safeguard:</strong>
+              Do NOT confirm batch eligibility or mark open without explicit supporting evidence (e.g. verified ATS URL, job post text quoting target batch). Submissions with missing or blank evidence are rejected.
+            </div>
+          </div>
+
+          <div class="form-group mb-3">
+            <label for="verifyEligibility">Eligibility Status:</label>
+            <select id="verifyEligibility" class="w-full">
+              <option value="">(Keep current status)</option>
+              <option value="eligible_2027">eligible_2027 (Explicitly Verified 2027)</option>
+              <option value="eligible_general">eligible_general (General Eligibility Verified)</option>
+              <option value="unknown">unknown (Unstated / Needs research)</option>
+              <option value="ineligible_batch">ineligible_batch (Past or incompatible batches)</option>
+              <option value="ineligible_senior">ineligible_senior (Senior role)</option>
+            </select>
+          </div>
+
+          <div class="form-group mb-3">
+            <label for="verifyAppStatus">Application Status:</label>
+            <select id="verifyAppStatus" class="w-full">
+              <option value="">(Keep current status)</option>
+              <option value="open">open (Confirmed actively accepting applications)</option>
+              <option value="expired">expired (Closed / Deadline passed)</option>
+              <option value="unknown">unknown (Unverified)</option>
+            </select>
+          </div>
+
+          <div class="form-group mb-3">
+            <label for="verifyEvidence">Supporting Evidence (Required):</label>
+            <textarea id="verifyEvidence" rows="3" class="w-full" placeholder="Quote the explicit posting sentence, ATS link, or communication confirming this update..." required></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="verifyNotes">Additional Verification Notes:</label>
+            <input type="text" id="verifyNotes" class="w-full" placeholder="Optional notes for audit log...">
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btnCancelVerify">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btnSubmitVerify">Save & Apply Safeguards</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: TRACK APPLICATION -->
+  <div class="modal-overlay hidden" id="trackerModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <h3 class="modal-title" id="trackerModalTitle">Add Application to Tracker</h3>
+          <p class="modal-subtitle">Syncs with job_search_tracker.csv</p>
+        </div>
+        <button class="modal-close" id="btnCloseTrackerModal">&times;</button>
+      </div>
+      <form id="trackerForm">
+        <div class="modal-body">
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label for="trackCompany">Company</label>
+              <input type="text" id="trackCompany" required>
+            </div>
+            <div class="form-group flex-1">
+              <label for="trackRole">Role Title</label>
+              <input type="text" id="trackRole" required>
+            </div>
+          </div>
+
+          <div class="form-row mt-3">
+            <div class="form-group flex-1">
+              <label for="trackStatus">Status</label>
+              <select id="trackStatus" required>
+                <option value="drafted">drafted (Preparing materials)</option>
+                <option value="applied">applied (Submitted)</option>
+                <option value="interview">interview (In interview stages)</option>
+                <option value="offer">offer (Offer received)</option>
+                <option value="hired">hired (Offer accepted)</option>
+                <option value="rejected">rejected (Explicit rejection)</option>
+                <option value="no_response">no_response (No reply / quiet)</option>
+                <option value="withdrawn">withdrawn (Application withdrawn)</option>
+              </select>
+            </div>
+            <div class="form-group flex-1">
+              <label for="trackDate">Date Applied</label>
+              <input type="date" id="trackDate">
+            </div>
+            <div class="form-group flex-1">
+              <label for="trackDeadline">Deadline</label>
+              <input type="date" id="trackDeadline">
+            </div>
+          </div>
+
+          <div class="form-row mt-3">
+            <div class="form-group flex-1">
+              <label for="trackSector">Sector</label>
+              <input type="text" id="trackSector" value="Technology">
+            </div>
+            <div class="form-group flex-1">
+              <label for="trackChannel">Channel</label>
+              <input type="text" id="trackChannel" value="direct">
+            </div>
+            <div class="form-group flex-1">
+              <label for="trackContact">Contact Person</label>
+              <input type="text" id="trackContact" placeholder="Recruiter / Team">
+            </div>
+          </div>
+
+          <div class="form-group mt-3">
+            <label for="trackNotes">Notes (Commas will be converted to semicolons for CSV safety)</label>
+            <input type="text" id="trackNotes" placeholder="Interview details, referral source, etc.">
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btnCancelTracker">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save to Tracker</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

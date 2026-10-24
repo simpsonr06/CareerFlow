@@ -291,7 +291,27 @@ Set-Location cover_letters; xelatex cover_<company>_<role>.tex; Set-Location ..
 
 These commands apply to the stock templates (moderncv CV, `cover.cls` cover letter). If you'd rather use your own LaTeX template, run `/add-template` — it captures the template's compile engine, fonts, style rules, and page limit, test-compiles it, and wires it into `/apply`. See the "LaTeX templates" section in the README.
 
-## 8. Pulling upstream updates into your fork
+## 8. Launch the CareerFlow Dashboard (Local Web UI)
+
+CareerFlow includes a local-first web interface for browsing discovered postings, verifying candidate eligibility with explicit supporting evidence, tracking applications in `job_search_tracker.csv`, running rate-limited portal searches, and adjusting your candidate profile.
+
+To launch the dashboard server:
+
+```powershell
+# PowerShell (Windows)
+python -m dashboard.server
+# or
+uvicorn dashboard.server:app --host 127.0.0.1 --port 8000
+```
+
+Open your browser and navigate to:
+```
+http://127.0.0.1:8000
+```
+
+> **Security Note:** The server binds strictly to `127.0.0.1` (loopback only) and will never automatically submit applications or contact recruiters.
+
+## 9. Pulling upstream updates into your fork
 
 Upstream keeps improving the methodology files your fork has personalized, so plan for updates from day one:
 

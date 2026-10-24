@@ -1,0 +1,72 @@
+{
+  "product_name": "CareerFlow",
+  "candidate_name": "Default Candidate",
+  "headline": "Technology & Security Graduate",
+  "preferred_roles": [
+    "Cybersecurity Analyst",
+    "Security Engineer",
+    "Information Security Intern",
+    "SOC Analyst",
+    "VAPT Analyst",
+    "AI Engineer",
+    "Backend Developer",
+    "Software Engineer",
+    "Python Developer"
+  ],
+  "target_industries": [
+    "Cybersecurity",
+    "Information Technology",
+    "Artificial Intelligence",
+    "Software Development",
+    "Finance & FinTech"
+  ],
+  "skills": [
+    "python",
+    "linux",
+    "networking",
+    "burp_suite",
+    "nmap",
+    "fastapi",
+    "apis",
+    "sql",
+    "ai_agents_llms",
+    "docker",
+    "git"
+  ],
+  "education": {
+    "degree": "B.Tech / B.S. in Computer Science or related",
+    "level": "Bachelor's Degree",
+    "graduation_year": 2027,
+    "require_grad_year_match": true
+  },
+  "experience_levels": [
+    "internship",
+    "fresher",
+    "entry_level"
+  ],
+  "locations": [
+    "India",
+    "Bangalore",
+    "Bengaluru",
+    "Noida",
+    "Gurugram",
+    "Gurgaon",
+    "Hyderabad",
+    "Pune",
+    "Chennai",
+    "Mumbai",
+    "Delhi",
+    "Remote"
+  ],
+  "work_arrangements": [
+    "remote",
+    "hybrid",
+    "onsite"
+  ],
+  "employment_types": [
+    "internship",
+    "full_time"
+  ],
+  "min_salary": null,
+  "scoring_weights": null
+}
