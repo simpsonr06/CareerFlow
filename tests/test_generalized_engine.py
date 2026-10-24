@@ -319,8 +319,19 @@ class TestMultiDomainMatchingMatrix(unittest.TestCase):
             "description": "Build high-throughput REST APIs using Python and FastAPI with PostgreSQL. Exclusively for 2027 batch.",
         }
         res_rel = evaluate_job(relevant_job, profile=swe_profile)
-        self.assertGreaterEqual(res_rel["relevance_score"], 75)
+        # Broad generic role receives 35 role pts + 15 seniority + 15 skills = 65 pts
+        self.assertGreaterEqual(res_rel["relevance_score"], 65)
         self.assertEqual(res_rel["shortlist_tier"], SHORTLIST_READY)
+
+        # Specialized backend role achieves 45 role pts + 15 seniority + 15 skills = 75 pts
+        specialized_swe_job = {
+            "title": "Backend Engineering Intern - 2027 Batch",
+            "company": "CloudTech Labs",
+            "description": "Build high-throughput REST APIs using Python and FastAPI with PostgreSQL. Exclusively for 2027 batch.",
+        }
+        res_spec = evaluate_job(specialized_swe_job, profile=swe_profile)
+        self.assertGreaterEqual(res_spec["relevance_score"], 75)
+        self.assertEqual(res_spec["shortlist_tier"], SHORTLIST_READY)
 
         # B. Unrelated
         unrelated_job = {

@@ -145,6 +145,7 @@ ROLE_DOMAIN_SYNONYMS = {
         r"\bai\s*engineer\b", r"\bai\s*developer\b", r"\bai\s*agent\b",
         r"\bllm\b", r"\bmachine\s*learning\b", r"\bdeep\s*learning\b",
         r"\bnlp\b", r"\bcomputer\s*vision\b", r"\bgenai\b", r"\bgenerative\s*ai\b",
+        r"\bdata\s*science\b", r"\bai\b",
     ],
     "software_engineering": [
         r"\bbackend\b", r"\bback-end\b", r"\bsoftware\s*engineer(ing)?\b",
@@ -234,13 +235,13 @@ DISQUALIFYING_SENIORITY_KEYWORDS = [
 SKILL_PATTERNS = {
     "python": r"\bpython\b",
     "linux": r"\blinux\b|\bunix\b|\bubuntu\b|\bkali\b",
-    "networking": r"\bnetworking\b|\btcp[/-]?ip\b|\bdns\b|\bvlan\b|\brouting\b|\bosi\b|\bwireshark\b",
+    "networking": r"\bnetworking\b|\btcp[/-]?ip\b|\bdns\b|\bvlan\b|\brouting\b|\bosi\b|\bwireshark\b|\bnetwork\s*security\b",
     "burp_suite": r"\bburp(\s*suite)?\b",
     "nmap": r"\bnmap\b",
     "fastapi": r"\bfastapi\b",
     "apis": r"\brest(ful)?\s*api(s)?\b|\bapi(s)?\b|\bendpoints?\b",
     "sql": r"\bsql\b|\bpostgresql\b|\bmysql\b|\bdatabase\b",
-    "ai_agents_llms": r"\bai\s*agents?\b|\bllm(s)?\b|\blangchain\b|\bllamaindex\b|\brag\b|\bprompt\s*engineering\b",
+    "ai_agents_llms": r"\bai\s*agents?\b|\bllm(s)?\b|\blangchain\b|\bllamaindex\b|\brag\b|\bprompt\s*engineering\b|\bmachine\s*learning\b|\bdeep\s*learning\b|\bgenai\b|\bgenerative\s*ai\b",
     "docker": r"\bdocker\b|\bcontainer(s|ization)?\b",
     "git": r"\bgit\b|\bgithub\b",
     "excel": r"\bexcel\b|\badvanced\s*excel\b|\bspreadsheets?\b",
@@ -248,7 +249,29 @@ SKILL_PATTERNS = {
     "seo": r"\bseo\b|\bsearch\s*engine\s*optimization\b",
     "figma": r"\bfigma\b|\bwirefram(ing|es)?\b|\bprototyp(ing|es)?\b",
     "clinical_trials": r"\bclinical\s*trials?\b|\bgcp\b|\bich[- ]gcp\b",
+    "vapt": r"\bvapt\b|\bvulnerability\s*assessment\b|\bpenetration\s*test(ing|er)?\b",
+    "recruiting": r"\brecruit(ing|ment|er|ers)?\b|\bscreen(ing)?\s*(applicants?|resumes?|candidates?)\b|\binterview(s|ing)?\b|\btalent\s*acquisition\b",
+    "talent_sourcing": r"\btalent\s*sourc(ing|e)\b|\bsourc(ing)?\s*candidates\b|\bcandidate\s*pipeline(s)?\b",
+    "onboarding": r"\bonboard(ing)?\b|\borientation\b",
 }
+
+# Generic / umbrella role terms that should not be scored as specialized target roles
+# when the candidate's profile specifies distinct domain specializations
+GENERIC_BROAD_ROLES = {
+    "software engineer",
+    "software engineering",
+    "software developer",
+    "software development",
+    "engineer",
+    "developer",
+    "analyst",
+    "intern",
+    "trainee",
+    "associate",
+    "specialist",
+    "consultant",
+}
+
 
 
 def normalize_url(url: str) -> str:
@@ -465,18 +488,29 @@ def match_role_and_industry(
     preferred_roles: list[str],
     target_industries: list[str],
 ) -> tuple[int, list[str]]:
-    """Score role alignment and extract matched labels based on candidate preferences."""
+    """Score role alignment and extract matched labels based on candidate preferences.
+
+    Returns:
+      (score, matched_labels)
+      - Specialized preferred role in title: 45 pts
+      - Broad/generic preferred role in title: 35 pts (when candidate targets specialized roles)
+      - Industry matched in title: 25 pts
+      - Preferred role or industry in body: 20 pts
+      - Conflicting title domain or no match: 0 pts
+    """
     full_text = f"{title}\n{description}"
     title_lower = title.lower()
     full_lower = full_text.lower()
 
     matched_labels = []
-    title_matched = False
+    title_role_matched = False
+    title_industry_matched = False
     body_matched = False
+    is_specialized_title_match = False
 
     all_targets = preferred_roles + target_industries
     if not all_targets:
-        return 25, ["General Opportunity"]
+        return 20, ["General Opportunity"]
 
     # Detect domains the title belongs to
     title_domains = set()
@@ -499,59 +533,111 @@ def match_role_and_industry(
     if is_conflicting_title_domain:
         return 0, []
 
-    for target in all_targets:
-        target_norm = target.strip().lower()
-        if not target_norm:
-            continue
+    # Check if candidate specified specialized roles in addition to generic broad roles
+    has_specialized_roles = any(
+        r.strip().lower() not in GENERIC_BROAD_ROLES
+        for r in preferred_roles
+    )
 
-        # Check known domain synonyms
-        patterns_to_check = []
+    def build_patterns(target_str: str) -> list[str]:
+        target_norm = target_str.strip().lower()
+        if not target_norm:
+            return []
+        patterns = []
         domain_key = re.sub(r"[^\w]", "_", target_norm).strip("_")
         for k, syns in ROLE_DOMAIN_SYNONYMS.items():
             if k in domain_key or any(word in target_norm for word in k.split("_")):
-                patterns_to_check.extend(syns)
+                patterns.extend(syns)
 
-        # Dynamic regex for arbitrary/custom user-specified roles
-        word_patterns = []
-        for w in re.split(r"[^\w]+", target_norm):
-            if len(w) <= 2:
-                continue
+        core_role = re.sub(
+            r"\s*(specialist|specialists|coordinator|coordinators|generalist|generalists|associate|associates|lead|leads|expert|experts|consultant|consultants|officer|officers|executive|executives)\s*$",
+            "",
+            target_norm,
+        ).strip()
+
+        def word_variant(w: str) -> str:
             if w.endswith("er") and len(w) > 4:
-                word_patterns.append(re.escape(w[:-2]) + r"(?:er|ers|ing|ed)?")
+                return re.escape(w[:-2]) + r"(?:er|ers|ering|ing|ed|ment)?"
             elif w.endswith("or") and len(w) > 4:
-                word_patterns.append(re.escape(w[:-2]) + r"(?:or|ors|ing)?")
+                return re.escape(w[:-2]) + r"(?:or|ors|ing)?"
             elif w.endswith("ing") and len(w) > 5:
-                word_patterns.append(re.escape(w[:-3]) + r"(?:ing|er|ers)?")
-            else:
-                word_patterns.append(re.escape(w) + r"s?")
-        if word_patterns:
-            patterns_to_check.append(r"\b" + r"[\s-]*".join(word_patterns) + r"\b")
+                return re.escape(w[:-3]) + r"(?:ing|er|ers)?"
+            return re.escape(w) + r"s?"
 
-        # Execute regex checks
-        t_match = any(re.search(p, title_lower) for p in patterns_to_check)
-        b_match = any(re.search(p, full_lower) for p in patterns_to_check)
+        for phrase in (target_norm, core_role):
+            if not phrase:
+                continue
+            words = [word_variant(w) for w in re.split(r"[^\w]+", phrase) if len(w) >= 2]
+            if words:
+                patterns.append(r"\b" + r"[\s-]*".join(words) + r"\b")
+        return patterns
 
+    # 1. Evaluate preferred roles
+    for role in preferred_roles:
+        r_patterns = build_patterns(role)
+        if not r_patterns:
+            continue
+        t_match = any(re.search(p, title_lower) for p in r_patterns)
+        b_match = any(re.search(p, full_lower) for p in r_patterns)
         if t_match:
-            title_matched = True
-            if target not in matched_labels:
-                matched_labels.append(target)
+            title_role_matched = True
+            is_generic = role.strip().lower() in GENERIC_BROAD_ROLES
+            if not is_generic:
+                is_specialized_title_match = True
+            if role not in matched_labels:
+                matched_labels.append(role)
         elif b_match:
             body_matched = True
-            if target not in matched_labels:
-                matched_labels.append(target)
+            if role not in matched_labels:
+                matched_labels.append(role)
 
-    if title_matched:
-        return 55, matched_labels
+    # 2. Evaluate target industries
+    for ind in target_industries:
+        i_patterns = build_patterns(ind)
+        if not i_patterns:
+            continue
+        t_match = any(re.search(p, title_lower) for p in i_patterns)
+        b_match = any(re.search(p, full_lower) for p in i_patterns)
+        if t_match:
+            title_industry_matched = True
+            if ind not in matched_labels:
+                matched_labels.append(ind)
+        elif b_match:
+            body_matched = True
+            if ind not in matched_labels:
+                matched_labels.append(ind)
+
+    if is_specialized_title_match:
+        return 45, matched_labels
+    elif title_role_matched:
+        return (35 if has_specialized_roles else 45), matched_labels
+    elif title_industry_matched:
+        return 25, matched_labels
     elif body_matched:
-        return 35, matched_labels
+        return 20, matched_labels
 
     return 0, []
 
 
-def match_skills(full_text: str, skills_list: list[str]) -> tuple[int, list[str]]:
-    """Match candidate skills dynamically against posting text."""
+def match_skills(
+    full_text: str,
+    skills_list: list[str],
+    job_skills: list[str] | None = None,
+) -> tuple[int, list[str]]:
+    """Match candidate skills dynamically against posting text and structured tags.
+
+    Max score: 25 pts.
+    """
     if not skills_list:
-        return 10, []
+        return 15, []
+
+    # If description is missing/empty and no structured skills, skills cannot be confirmed
+    if len(full_text.strip()) < 50 and not job_skills:
+        return 0, []
+
+    search_corpus = full_text
+    if job_skills and isinstance(job_skills, list):
+        search_corpus += " " + " ".join(str(s) for s in job_skills)
 
     matched = []
     for skill in skills_list:
@@ -561,16 +647,16 @@ def match_skills(full_text: str, skills_list: list[str]) -> tuple[int, list[str]
         if clean in SKILL_PATTERNS:
             pattern = SKILL_PATTERNS[clean]
         else:
-            words = [re.escape(w) for w in re.split(r"[^\w]+", clean) if w]
+            words = [re.escape(w) for w in re.split(r"[\s_-]+|[^\w]+", clean) if w]
             if not words:
                 continue
             pattern = r"\b" + r"[\s_-]*".join(words) + r"\b"
 
-        if re.search(pattern, full_text, re.IGNORECASE):
+        if re.search(pattern, search_corpus, re.IGNORECASE):
             matched.append(clean)
 
     target_count = max(1, min(5, len(skills_list)))
-    score = min(20, round((len(matched) / target_count) * 20))
+    score = min(25, round((len(matched) / target_count) * 25))
     return score, matched
 
 
@@ -634,7 +720,7 @@ def evaluate_job(job: dict, profile: dict | None = None) -> dict:
         "freshness": 0,
     }
 
-    # Role & Industry Match (up to 55 pts)
+    # Role & Industry Match (up to 45 pts)
     preferred_roles = active_profile.get("preferred_roles", [])
     target_industries = active_profile.get("target_industries", [])
     role_score, matched_roles = match_role_and_industry(
@@ -645,25 +731,28 @@ def evaluate_job(job: dict, profile: dict | None = None) -> dict:
     )
     relevance_breakdown["role"] = role_score
 
-    # Seniority Match (up to 25 pts)
+    # Seniority Match (up to 15 pts)
     title_is_intern = any(re.search(p, title_lower) for p in SENIORITY_INTERN_KEYWORDS)
     is_intern = any(re.search(p, full_text, re.IGNORECASE) for p in SENIORITY_INTERN_KEYWORDS)
 
     if wants_intern_or_entry:
-        if title_is_intern:
-            relevance_breakdown["seniority"] += 25
+        if is_disqualified:
+            relevance_breakdown["seniority"] = 0
+        elif title_is_intern:
+            relevance_breakdown["seniority"] = 15
         elif is_intern:
-            relevance_breakdown["seniority"] += 15
+            relevance_breakdown["seniority"] = 10
     else:
         # Non-intern preference (mid/senior/any)
-        relevance_breakdown["seniority"] += 20
+        relevance_breakdown["seniority"] = 15
 
-    # Skills Match (up to 20 pts)
+    # Skills Match (up to 25 pts)
     profile_skills = active_profile.get("skills", [])
-    skills_score, matched_skills = match_skills(full_text, profile_skills)
+    job_skills = job.get("skills") if isinstance(job.get("skills"), list) else None
+    skills_score, matched_skills = match_skills(full_text, profile_skills, job_skills=job_skills)
     relevance_breakdown["skills"] = skills_score
 
-    # Location & Work Mode Match (up to 10 pts)
+    # Location & Work Mode Match (up to 5 pts)
     raw_locations = active_profile.get("locations")
     pref_locations = [loc.strip().lower() for loc in raw_locations if loc.strip()] if raw_locations is not None else []
     loc_lower = location.lower()
@@ -671,25 +760,25 @@ def evaluate_job(job: dict, profile: dict | None = None) -> dict:
 
     if not pref_locations:
         # Candidate is location-agnostic; award full location score
-        relevance_breakdown["location"] += 10
+        relevance_breakdown["location"] = 5
     elif work_mode_str == "remote" or "remote" in full_text.lower():
-        relevance_breakdown["location"] += 10
+        relevance_breakdown["location"] = 5
     elif any(ploc in loc_lower for ploc in pref_locations):
-        relevance_breakdown["location"] += 10
+        relevance_breakdown["location"] = 5
     elif any(ploc in full_text.lower() for ploc in pref_locations):
-        relevance_breakdown["location"] += 5
+        relevance_breakdown["location"] = 3
 
-    # Compensation bonus (up to 5 pts)
+    # Compensation bonus (up to 3 pts)
     if re.search(r"\b(stipend|salary|inr|₹|\$|eur|£|per\s*month|lpa|compensation)\b", full_text, re.IGNORECASE):
-        relevance_breakdown["compensation"] += 5
+        relevance_breakdown["compensation"] = 3
 
-    # Freshness (up to 5 pts)
+    # Freshness (up to 2 pts)
     if listing_date and isinstance(listing_date, str):
         parsed_post = parse_iso_date(listing_date)
         if parsed_post:
             days_old = (datetime.now(timezone.utc).date() - parsed_post).days
             if 0 <= days_old <= 14:
-                relevance_breakdown["freshness"] += 5
+                relevance_breakdown["freshness"] = 2
 
     raw_score = sum(relevance_breakdown.values())
 
@@ -758,24 +847,32 @@ def evaluate_job(job: dict, profile: dict | None = None) -> dict:
             elig_status = "unrelated_role"
 
     elif app_status == "expired":
-        score = max(0, min(50, raw_score))
+        score = min(100, raw_score)
         classification = LOW_MATCH
         shortlist_tier = EXCLUDED
         verification_notes = "Excluded: Posting is confirmed closed or application deadline has passed."
 
     elif elig_status in ("ineligible_batch", "ineligible_degree_completed"):
-        score = max(0, min(50, raw_score))
+        score = min(100, raw_score)
         classification = LOW_MATCH
         shortlist_tier = EXCLUDED
         verification_notes = f"Excluded: Ineligible graduation batch ({elig_note})."
 
     elif raw_score < 45:
-        score = max(0, min(100, raw_score))
+        score = min(100, raw_score)
         classification = LOW_MATCH
         shortlist_tier = EXCLUDED
         verification_notes = f"Low match: Weak alignment with configured candidate profile (score: {score})."
 
-    elif raw_score >= 70 and seniority_satisfied and is_eligible:
+    elif len(description) < 50:
+        score = min(100, raw_score)
+        classification = NEEDS_VERIFICATION
+        shortlist_tier = VERIFICATION_QUEUE
+        verification_notes = "Verification queue: Description is missing or incomplete; authentic employer posting details required before shortlisting."
+        if require_grad_match and elig_status.startswith("eligible_"):
+            elig_status = "unspecified"
+
+    elif raw_score >= 65 and seniority_satisfied and is_eligible:
         score = min(100, raw_score)
         classification = HIGH_MATCH
         shortlist_tier = SHORTLIST_READY

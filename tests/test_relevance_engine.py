@@ -630,5 +630,407 @@ class TestPhase3DetailVerificationAndDeduplication(unittest.TestCase):
         self.assertEqual(evaluated["verification_source"], "freehire_api")
 
 
+class TestRelevanceEngineScoringAuditAndReliability(unittest.TestCase):
+    """Reliability and audit regression tests ensuring calibrated, explainable scoring
+
+    and strict separation of technical relevance, eligibility, authenticity, and availability.
+    """
+
+    def test_regression_strong_cybersecurity_internship_match(self):
+        """A strong cybersecurity internship with core skills and verified 2027 eligibility
+
+        achieves a top-tier relevance score (>= 85) and is SHORTLIST_READY.
+        """
+        cyber_job = {
+            "title": "Cyber Security Analyst Intern",
+            "company": "Sentinel Defense",
+            "location": "Bengaluru, India",
+            "url": "https://sentinel.greenhouse.io/jobs/101",
+            "date": "2026-10-20T00:00:00Z",
+            "description": (
+                "Sentinel Defense is seeking a Cyber Security Analyst Intern to conduct vulnerability "
+                "assessments (VAPT), network security scanning with Nmap and Burp Suite on Linux servers, "
+                "and security automation scripting in Python. Exclusively open to 2027 batch engineering students. "
+                "Stipend: ₹30,000 / month."
+            ),
+        }
+        res = evaluate_job(cyber_job)
+        # Technical relevance reflects full alignment
+        self.assertGreaterEqual(res["relevance_score"], 85)
+        self.assertEqual(res["relevance_breakdown"]["role"], 45)
+        self.assertEqual(res["relevance_breakdown"]["seniority"], 15)
+        self.assertEqual(res["relevance_breakdown"]["skills"], 25)
+        self.assertIn("networking", res["matched_skills"])
+        self.assertIn("linux", res["matched_skills"])
+        self.assertIn("burp_suite", res["matched_skills"])
+        self.assertIn("nmap", res["matched_skills"])
+        self.assertIn("python", res["matched_skills"])
+        self.assertIn("Cybersecurity Analyst", res["matched_roles"])
+        # Eligibility and actionability
+        self.assertEqual(res["eligibility_status"], "eligible_2027")
+        self.assertEqual(res["classification"], HIGH_MATCH)
+        self.assertEqual(res["shortlist_tier"], SHORTLIST_READY)
+        self.assertEqual(res["verification_confidence"], CONFIDENCE_HIGH)
+
+    def test_regression_strong_backend_development_internship_match(self):
+        """A strong backend development internship with core stack achieves a top score (>= 85)."""
+        backend_job = {
+            "title": "Backend Developer Intern",
+            "company": "CloudScale Systems",
+            "location": "Hyderabad, India",
+            "url": "https://cloudscale.lever.co/jobs/202",
+            "date": "2026-10-22T00:00:00Z",
+            "description": (
+                "CloudScale Systems is hiring a Backend Developer Intern. You will design scalable microservices "
+                "using Python, FastAPI, and PostgreSQL (SQL), containerized with Docker and communicating over REST APIs. "
+                "Open to 2027 batch graduates. Stipend: ₹35,000 / month."
+            ),
+        }
+        res = evaluate_job(backend_job)
+        self.assertGreaterEqual(res["relevance_score"], 90)
+        self.assertEqual(res["relevance_breakdown"]["role"], 45)
+        self.assertEqual(res["relevance_breakdown"]["seniority"], 15)
+        self.assertEqual(res["relevance_breakdown"]["skills"], 25)
+        self.assertEqual(res["relevance_breakdown"]["location"], 5)
+        self.assertEqual(res["relevance_breakdown"]["compensation"], 3)
+        self.assertEqual(res["relevance_breakdown"]["freshness"], 2)
+        # Total equals 95 perfectly (45 + 15 + 25 + 5 + 3 + 2)
+        self.assertEqual(res["relevance_score"], 95)
+        self.assertEqual(res["eligibility_status"], "eligible_2027")
+        self.assertEqual(res["classification"], HIGH_MATCH)
+        self.assertEqual(res["shortlist_tier"], SHORTLIST_READY)
+
+    def test_regression_generic_software_internship_with_zero_skills_never_receives_100(self):
+        """A generic software internship requiring unrelated technologies (Java, C++) with
+
+        zero candidate skill overlap must NOT receive 100/100 (capped at 75 max).
+        """
+        generic_unrelated_stack_job = {
+            "title": "Software Engineering Intern",
+            "company": "Acme Retail Tech",
+            "location": "Bengaluru, India",
+            "date": "2026-10-22T00:00:00Z",
+            "description": (
+                "Acme Retail Tech is hiring Software Engineering Interns. Work on our enterprise e-commerce "
+                "backend using Java, Spring Boot, React, and C++. Stipend: ₹25,000 / month. 2027 batch eligible."
+            ),
+        }
+        res = evaluate_job(generic_unrelated_stack_job)
+        # Zero matching candidate skills
+        self.assertEqual(res["matched_skills"], [])
+        self.assertEqual(res["relevance_breakdown"]["skills"], 0)
+        # Must never receive 100/100 (generic role: 35 + 15 + 5 + 3 + 2 = 60 <= 75)
+        self.assertEqual(res["relevance_breakdown"]["role"], 35)
+        self.assertLessEqual(res["relevance_score"], 75)
+        self.assertNotEqual(res["relevance_score"], 100)
+
+    def test_regression_generic_software_internship_with_partial_skills_is_calibrated(self):
+        """A generic software internship with partial overlap (only git and python) receives
+
+        a calibrated proportional score (~70), never an inflated 100.
+        """
+        partial_job = {
+            "title": "Software Engineering Intern",
+            "company": "Acme Retail Tech",
+            "location": "Bengaluru, India",
+            "date": "2026-10-22T00:00:00Z",
+            "description": (
+                "Software Engineering Intern to write automation scripts in Python and collaborate on Git. "
+                "Stipend: ₹25,000 / month. Open to 2027 batch."
+            ),
+        }
+        res = evaluate_job(partial_job)
+        self.assertCountEqual(res["matched_skills"], ["python", "git"])
+        # 2 skills out of 5 = (2/5)*25 = 10 pts
+        self.assertEqual(res["relevance_breakdown"]["skills"], 10)
+        self.assertEqual(res["relevance_breakdown"]["role"], 35)
+        # Total is calibrated: 35 + 15 + 10 + 5 + 3 + 2 = 70
+        self.assertEqual(res["relevance_score"], 70)
+        self.assertNotEqual(res["relevance_score"], 100)
+
+    def test_regression_unrelated_sales_or_marketing_role(self):
+        """An unrelated sales or marketing vacancy receives a low score (< 40) and is EXCLUDED."""
+        unrelated_job = {
+            "title": "Digital Marketing & Sales Intern",
+            "company": "GrowthBuzz Agency",
+            "location": "Mumbai, India",
+            "description": (
+                "Join us as a Digital Marketing & Sales Intern. Responsibilities: social media marketing, "
+                "lead generation, cold outreach, and client demos."
+            ),
+        }
+        res = evaluate_job(unrelated_job)
+        self.assertEqual(res["relevance_breakdown"]["role"], 0)
+        self.assertLess(res["relevance_score"], 40)
+        self.assertEqual(res["classification"], LOW_MATCH)
+        self.assertEqual(res["shortlist_tier"], EXCLUDED)
+
+    def test_regression_vacancy_missing_important_fields(self):
+        """A vacancy with a missing description cannot verify skills, receives low confidence,
+
+        and is routed to VERIFICATION_QUEUE.
+        """
+        stub_job = {
+            "title": "Software Engineering Intern",
+            "company": "Stealth Tech",
+            "location": "",
+            "description": "",  # Empty description
+        }
+        res = evaluate_job(stub_job)
+        # Skills cannot be verified from empty stub
+        self.assertEqual(res["relevance_breakdown"]["skills"], 0)
+        self.assertEqual(res["relevance_breakdown"]["location"], 0)
+        self.assertLessEqual(res["relevance_score"], 65)
+        self.assertEqual(res["verification_confidence"], CONFIDENCE_LOW)
+        self.assertEqual(res["classification"], NEEDS_VERIFICATION)
+        self.assertEqual(res["shortlist_tier"], VERIFICATION_QUEUE)
+        self.assertIn("missing or incomplete", res["verification_notes"])
+
+    def test_regression_explicit_graduation_year_mismatch_preserves_technical_score(self):
+        """A strong technical role with graduation mismatch retains its technical relevance score
+
+        while being strictly classified as LOW_MATCH and EXCLUDED (separation of concerns).
+        """
+        ineligible_batch_job = {
+            "title": "Cyber Security Analyst Intern",
+            "company": "ShieldCorp",
+            "location": "Bengaluru, India",
+            "date": "2026-10-20T00:00:00Z",
+            "description": (
+                "Cyber Security Analyst Intern. Skills: VAPT, Burp Suite, Nmap, Linux, Python. "
+                "Strictly restricted to 2024 batch pass-out graduates only. Degree must be completed."
+            ),
+        }
+        res = evaluate_job(ineligible_batch_job)
+        # Technical relevance is preserved (not artificially flattened)
+        self.assertGreaterEqual(res["relevance_score"], 80)
+        self.assertIn("linux", res["matched_skills"])
+        self.assertIn("burp_suite", res["matched_skills"])
+        self.assertIn("nmap", res["matched_skills"])
+        self.assertIn("python", res["matched_skills"])
+        self.assertIn("Cybersecurity Analyst", res["matched_roles"])
+        # But eligibility and shortlist policy strictly exclude it
+        self.assertEqual(res["eligibility_status"], "ineligible_batch")
+        self.assertEqual(res["classification"], LOW_MATCH)
+        self.assertEqual(res["shortlist_tier"], EXCLUDED)
+        self.assertIn("Ineligible graduation batch", res["verification_notes"])
+
+    def test_regression_expired_vacancy_preserves_technical_score(self):
+        """An expired vacancy retains its technical relevance score while being excluded
+
+        from active application queues (separation of concerns).
+        """
+        expired_job = {
+            "title": "Backend Developer Intern",
+            "company": "DevCloud",
+            "location": "Bengaluru, India",
+            "deadline": "2024-01-01",  # Past deadline
+            "description": (
+                "Backend Developer Intern skilled in Python, FastAPI, SQL, Docker, and REST APIs. "
+                "For 2027 batch graduates."
+            ),
+        }
+        res = evaluate_job(expired_job)
+        # Technical relevance is preserved
+        self.assertGreaterEqual(res["relevance_score"], 80)
+        # But availability and shortlist policy strictly exclude it
+        self.assertEqual(res["application_status"], "expired")
+        self.assertEqual(res["classification"], LOW_MATCH)
+        self.assertEqual(res["shortlist_tier"], EXCLUDED)
+        self.assertIn("closed or application deadline has passed", res["verification_notes"])
+
+    # --- DEFECT 1 REGRESSION TESTS (Verification safeguard) ---
+
+    def test_defect1_target_batch_internship_with_empty_description_routed_to_verification_queue(self):
+        """A vacancy with 2027 in the title but an empty description must NOT reach SHORTLIST_READY.
+
+        It preserves its technical relevance score but is routed to VERIFICATION_QUEUE with unconfirmed eligibility.
+        """
+        job = {
+            "title": "Cyber Security Analyst Intern - 2027 Batch",
+            "company": "SecureStub Corp",
+            "location": "Bengaluru, India",
+            "description": "",
+        }
+        res = evaluate_job(job)
+        # Technical relevance score is preserved (45 role + 15 seniority + 5 location = 65)
+        self.assertEqual(res["relevance_score"], 65)
+        self.assertEqual(res["relevance_breakdown"]["skills"], 0)
+        # Must NOT be SHORTLIST_READY or HIGH_MATCH without authentic description evidence
+        self.assertNotEqual(res["shortlist_tier"], SHORTLIST_READY)
+        self.assertEqual(res["shortlist_tier"], VERIFICATION_QUEUE)
+        self.assertEqual(res["classification"], NEEDS_VERIFICATION)
+        self.assertEqual(res["eligibility_status"], "unspecified")
+        self.assertEqual(res["verification_confidence"], CONFIDENCE_LOW)
+        self.assertIn("missing or incomplete", res["verification_notes"])
+
+    def test_defect1_target_batch_internship_with_description_under_50_chars(self):
+        """A vacancy with a description shorter than 50 characters cannot verify skills or authenticity
+
+        and must be routed to VERIFICATION_QUEUE rather than SHORTLIST_READY.
+        """
+        job = {
+            "title": "Cyber Security Analyst Intern - 2027 Batch",
+            "company": "MicroSnippet Ltd",
+            "location": "Bengaluru, India",
+            "description": "Apply now for our 2027 batch internship.",  # 40 chars < 50
+        }
+        res = evaluate_job(job)
+        self.assertEqual(res["relevance_score"], 65)
+        self.assertNotEqual(res["shortlist_tier"], SHORTLIST_READY)
+        self.assertEqual(res["shortlist_tier"], VERIFICATION_QUEUE)
+        self.assertEqual(res["classification"], NEEDS_VERIFICATION)
+        self.assertEqual(res["eligibility_status"], "unspecified")
+        self.assertEqual(res["verification_confidence"], CONFIDENCE_LOW)
+        self.assertIn("missing or incomplete", res["verification_notes"])
+
+    def test_defect1_complete_documented_eligible_internship_qualifies_for_shortlist_ready(self):
+        """A complete, sufficiently documented, eligible internship qualifies for SHORTLIST_READY."""
+        complete_job = {
+            "title": "Cyber Security Analyst Intern",
+            "company": "Sentinel Defense",
+            "location": "Bengaluru, India",
+            "url": "https://sentinel.greenhouse.io/jobs/101",
+            "date": "2026-10-20T00:00:00Z",
+            "description": (
+                "Sentinel Defense is seeking a Cyber Security Analyst Intern to conduct vulnerability "
+                "assessments (VAPT), network security scanning with Nmap and Burp Suite on Linux servers, "
+                "and security automation scripting in Python. Exclusively open to 2027 batch engineering students. "
+                "Stipend: ₹30,000 / month."
+            ),
+        }
+        res = evaluate_job(complete_job)
+        self.assertGreaterEqual(res["relevance_score"], 65)
+        self.assertEqual(res["shortlist_tier"], SHORTLIST_READY)
+        self.assertEqual(res["classification"], HIGH_MATCH)
+        self.assertEqual(res["eligibility_status"], "eligible_2027")
+
+    def test_defect1_ineligible_batch_with_high_technical_relevance_remains_excluded(self):
+        """An ineligible graduation batch vacancy with high technical relevance remains EXCLUDED."""
+        ineligible_job = {
+            "title": "Cyber Security Analyst Intern",
+            "company": "Sentinel Defense",
+            "location": "Bengaluru, India",
+            "date": "2026-10-20T00:00:00Z",
+            "description": (
+                "Sentinel Defense seeks a Cyber Security Analyst Intern. Skills: VAPT, Nmap, Burp Suite, "
+                "Linux, Python scripting. Strictly for 2024 batch pass-out graduates only. Degree must be completed."
+            ),
+        }
+        res = evaluate_job(ineligible_job)
+        # Technical relevance score is preserved independently
+        self.assertGreaterEqual(res["relevance_score"], 80)
+        self.assertEqual(res["shortlist_tier"], EXCLUDED)
+        self.assertEqual(res["classification"], LOW_MATCH)
+        self.assertEqual(res["eligibility_status"], "ineligible_batch")
+
+    def test_defect1_expired_vacancy_with_high_technical_relevance_remains_excluded(self):
+        """An expired vacancy with high technical relevance remains EXCLUDED."""
+        expired_job = {
+            "title": "Cyber Security Analyst Intern",
+            "company": "Sentinel Defense",
+            "location": "Bengaluru, India",
+            "deadline": "2024-01-01",
+            "description": (
+                "Sentinel Defense seeks a Cyber Security Analyst Intern. Skills: VAPT, Nmap, Burp Suite, "
+                "Linux, Python scripting. For 2027 batch graduates."
+            ),
+        }
+        res = evaluate_job(expired_job)
+        # Technical relevance score is preserved independently
+        self.assertGreaterEqual(res["relevance_score"], 80)
+        self.assertEqual(res["shortlist_tier"], EXCLUDED)
+        self.assertEqual(res["classification"], LOW_MATCH)
+        self.assertEqual(res["application_status"], "expired")
+
+    # --- DEFECT 2 REGRESSION TESTS (Generic vs specialized role calibration) ---
+
+    def test_defect2_equivalent_cybersecurity_vs_generic_software_internships(self):
+        """Compare otherwise equivalent cybersecurity-specific and generic software-engineering internships.
+
+        The specialized cybersecurity role receives 45 role pts while generic software receives 35 role pts.
+        """
+        cyber_job = {
+            "title": "Cyber Security Analyst Intern",
+            "company": "Alpha Corp",
+            "location": "Bengaluru, India",
+            "date": "2026-10-22T00:00:00Z",
+            "description": (
+                "Alpha Corp is hiring an intern. Work with Python, Linux, Nmap, Burp Suite, and Docker. "
+                "Stipend: ₹30,000 / month. 2027 batch eligible."
+            ),
+        }
+        generic_swe_job = {
+            "title": "Software Engineering Intern",
+            "company": "Beta Corp",
+            "location": "Bengaluru, India",
+            "date": "2026-10-22T00:00:00Z",
+            "description": (
+                "Beta Corp is hiring an intern. Work with Python, Linux, Nmap, Burp Suite, and Docker. "
+                "Stipend: ₹30,000 / month. 2027 batch eligible."
+            ),
+        }
+        res_cyber = evaluate_job(cyber_job)
+        res_swe = evaluate_job(generic_swe_job)
+
+        # Both match the exact same 5 skills (25 pts), seniority (15 pts), location (5 pts), comp (3 pts), freshness (2 pts)
+        self.assertEqual(res_cyber["relevance_breakdown"]["skills"], 25)
+        self.assertEqual(res_swe["relevance_breakdown"]["skills"], 25)
+
+        # Specialized vs broad generic role distinction
+        self.assertEqual(res_cyber["relevance_breakdown"]["role"], 45)
+        self.assertEqual(res_swe["relevance_breakdown"]["role"], 35)
+
+        # Score difference is exactly 10 points
+        self.assertEqual(res_cyber["relevance_score"], 95)
+        self.assertEqual(res_swe["relevance_score"], 85)
+        self.assertEqual(res_cyber["relevance_score"] - res_swe["relevance_score"], 10)
+
+    def test_defect2_candidate_targeting_only_generic_roles_receives_full_role_score(self):
+        """A candidate whose profile only specifies generic roles (no specialized domain) receives 45 points."""
+        broad_profile = {
+            "preferred_roles": ["Software Engineer", "Software Developer"],
+            "target_industries": ["Software Development"],
+            "skills": ["python", "git"],
+            "locations": ["Bengaluru"],
+            "experience_levels": ["internship"],
+            "education": {"graduation_year": 2027, "require_grad_year_match": True},
+        }
+        job = {
+            "title": "Software Engineering Intern",
+            "company": "Tech Corp",
+            "location": "Bengaluru",
+            "description": "Software Engineering Intern working on Python and Git. 2027 batch.",
+        }
+        res = evaluate_job(job, profile=broad_profile)
+        # Because candidate does not target specialized roles, the generic role in title receives 45 pts
+        self.assertEqual(res["relevance_breakdown"]["role"], 45)
+
+    def test_defect2_unrelated_sales_and_marketing_roles(self):
+        """Unrelated roles such as Sales and Marketing receive 0 role points and are EXCLUDED."""
+        sales_job = {
+            "title": "Inside Sales Representative Intern",
+            "company": "SalesGrowth",
+            "location": "Bengaluru",
+            "description": "Cold calling, outbound lead qualification, CRM management.",
+        }
+        marketing_job = {
+            "title": "Digital Marketing & SEO Intern",
+            "company": "BrandReach",
+            "location": "Bengaluru",
+            "description": "Social media content, paid ad campaigns, Google Analytics.",
+        }
+        res_sales = evaluate_job(sales_job)
+        res_mkt = evaluate_job(marketing_job)
+
+        self.assertEqual(res_sales["relevance_breakdown"]["role"], 0)
+        self.assertEqual(res_sales["classification"], LOW_MATCH)
+        self.assertEqual(res_sales["shortlist_tier"], EXCLUDED)
+
+        self.assertEqual(res_mkt["relevance_breakdown"]["role"], 0)
+        self.assertEqual(res_mkt["classification"], LOW_MATCH)
+        self.assertEqual(res_mkt["shortlist_tier"], EXCLUDED)
+
+
 if __name__ == "__main__":
     unittest.main()
